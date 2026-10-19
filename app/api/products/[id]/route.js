@@ -1,70 +1,43 @@
 import { NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import mysql from 'mysql2/promise';
 
-// GET /api/products/:id -> get one product
-export async function GET(request, { params }) {
-  try {
-    const pool = getPool();
-    const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [
-      params.id,
-    ]);
+const dbConfig = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306,
+  ssl: { rejectUnauthorized: true }
+};
 
-    if (rows.length === 0) {
-      return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 404 });
-    }
-
-    return NextResponse.json(rows[0]);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// PUT /api/products/:id -> update a product
+// PUT: Update produk
 export async function PUT(request, { params }) {
   try {
+    const { id } = params;
     const body = await request.json();
-    const { name, description, price } = body;
+    const { name, description, price, category_id } = body;
 
-    if (!name || price === undefined || price === '') {
-      return NextResponse.json(
-        { error: 'Field "name" dan "price" wajib diisi' },
-        { status: 400 }
-      );
-    }
-
-    const pool = getPool();
-    const [result] = await pool.query(
-      'UPDATE products SET name = ?, description = ?, price = ? WHERE id = ?',
-      [name, description || null, price, params.id]
-    );
-
-    if (result.affectedRows === 0) {
-      return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 404 });
-    }
-
-    return NextResponse.json({ id: Number(params.id), name, description, price });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-// DELETE /api/products/:id -> delete a product
-export async function DELETE(request, { params }) {
-  try {
-    const pool = getPool();
-    const [result] = await pool.query('DELETE FROM products WHERE id = ?', [
-      params.id,
-    ]);
-
-    if (result.affectedRows === 0) {
-      return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 404 });
-    }
+    const connection = await mysql.createConnection(dbConfig);
+    const query = 'UPDATE products SET name = ?, description = ?, price = ?, category_id = ? WHERE id = ?';
+    await connection.execute(query, [name, description || '', price, category_id, id]);
+    await connection.end();
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// DELETE: Hapus produk
+export async function DELETE(request, { params }) {
+  try {
+    const { id } = params;
+    const connection = await mysql.createConnection(dbConfig);
+    await connection.execute('DELETE FROM products WHERE id = ?', [id]);
+    await connection.end();
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

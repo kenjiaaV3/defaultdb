@@ -2,24 +2,38 @@
 
 import { useEffect, useState } from 'react';
 
-const emptyForm = { name: '', description: '', price: '' };
+const emptyForm = { name: '', description: '', price: '', category_id: '' };
 
 export default function Home() {
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  async function loadProducts() {
+  async function loadData() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/products');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal memuat data');
-      setProducts(data);
+      const [resProd, resCat] = await Promise.all([
+        fetch('/api/products'),
+        fetch('/api/categories')
+      ]);
+
+      const dataProd = await resProd.json();
+      const dataCat = await resCat.json();
+
+      if (!resProd.ok) throw new Error(dataProd.error || 'Gagal memuat produk');
+      if (!resCat.ok) throw new Error(dataCat.error || 'Gagal memuat kategori');
+
+      setProducts(dataProd);
+      setCategories(dataCat);
+
+      if (dataCat.length > 0 && !form.category_id) {
+        setForm((prev) => ({ ...prev, category_id: dataCat[0].id }));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -28,7 +42,7 @@ export default function Home() {
   }
 
   useEffect(() => {
-    loadProducts();
+    loadData();
   }, []);
 
   function handleChange(e) {
@@ -42,12 +56,16 @@ export default function Home() {
       name: product.name,
       description: product.description || '',
       price: product.price,
+      category_id: product.category_id || (categories[0] ? categories[0].id : ''),
     });
   }
 
   function cancelEdit() {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      category_id: categories[0] ? categories[0].id : '',
+    });
   }
 
   async function handleSubmit(e) {
@@ -67,9 +85,12 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan data');
 
-      setForm(emptyForm);
+      setForm({
+        ...emptyForm,
+        category_id: categories[0] ? categories[0].id : '',
+      });
       setEditingId(null);
-      await loadProducts();
+      await loadData();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -84,7 +105,7 @@ export default function Home() {
       const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menghapus data');
-      await loadProducts();
+      await loadData();
     } catch (err) {
       setError(err.message);
     }
@@ -93,7 +114,7 @@ export default function Home() {
   return (
     <main>
       <h1>CRUD Produk</h1>
-      <p className="subtitle">Next.js + MySQL (Aiven)</p>
+      <p className="subtitle">Next.js + MySQL (Aiven) - Relational Data</p>
 
       {error && <div className="error-box">{error}</div>}
 
@@ -110,6 +131,23 @@ export default function Home() {
               placeholder="Misal: Kopi Susu"
               required
             />
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="category_id">Kategori</label>
+            <select
+              id="category_id"
+              name="category_id"
+              value={form.category_id}
+              onChange={handleChange}
+              required
+            >
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-row">
@@ -160,6 +198,7 @@ export default function Home() {
         <thead>
           <tr>
             <th>Nama</th>
+            <th>Kategori</th>
             <th>Deskripsi</th>
             <th>Harga</th>
             <th>Aksi</th>
@@ -169,6 +208,7 @@ export default function Home() {
           {products.map((p) => (
             <tr key={p.id}>
               <td>{p.name}</td>
+              <td>{p.category_name || 'Umum'}</td>
               <td>{p.description}</td>
               <td>Rp {Number(p.price).toLocaleString('id-ID')}</td>
               <td>
